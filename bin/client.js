@@ -18,14 +18,17 @@
 'use strict';
 
 const readline = require('readline');
-
+const net = require('net');
 const async = require('async');
 const lodash = require('lodash');
 const shell = require('shelljs');
+const fs = require('fs');
 
 const Bluebox = require('../');
 const logger = require('../lib/utils/logger');
 
+//const pathSocket = '/tmp/.bluebox-ng';
+const pathSocket = process.env.HOME + '/.bluebox-ng';
 const prompt = 'Bluebox-ng> ';
 const portFromTransport = {
   udp: 5060,
@@ -34,6 +37,8 @@ const portFromTransport = {
   ws: 8080,
   wss: 4443,
 };
+
+const modulesResources = [];
 const modulesGeneralOptions = {};
 const modulesSetVars = [];
 
@@ -42,6 +47,9 @@ let modulesList = [];
 let exitNext = false;
 let bluebox = null;
 let autoCompType = 'command';
+
+//readline.emitKeypressEvents(process.stdin)
+//process.stdin.setRawMode(true);
 
 function completer(line) {
   let completions;
@@ -62,7 +70,11 @@ function completer(line) {
       completions = modulesSetVars.join(' ');
       tmpLine = line;
       hits = modulesSetVars.filter((c) => c.indexOf(tmpLine) === 0);
-
+      break;
+    case 'service':
+      completions = modulesResources.join(' ');
+      tmpLine = line;
+      hits = modulesResources.filter((c) => c.indexOf(tmpLine) === 0);
       break;
     default:
       completions = [];
@@ -82,7 +94,10 @@ function runModule(moduleName, readStream) {
     if (!err) {
       if (!result || result.length === 0) {
         logger.highlight('No result');
-      } else {
+      } else if ('resource' in result) {
+         modulesResources.push(result.resource);
+         logger.highlight('Service started');
+      }else{
         logger.json(result);
       }
     } else {
@@ -161,6 +176,10 @@ function runModule(moduleName, readStream) {
 }
 
 function exitFine() {
+  console.log('Borrando ' + pathSocket + '/blueboxSipDump.sock');
+  fs.unlink(`${pathSocket}/blueboxSipDump.sock`, (err) => {
+    logger.error(err);
+  });
   logger.bold('\nSee you! ;)');
   process.exit();
 }
@@ -256,6 +275,58 @@ const commCases = {
     logger.info('\n');
     readStream.prompt();
   },
+  start: readStream => {
+    autoCompType = 'service';
+    readStream.question(
+      '* service: ',
+      answerService => {
+        if (answerService) {
+          if (modulesResources.indexOf(answerService.trim()) !== -1) {
+            const client = net.connect({path: `${pathSocket}/${answerService.trim()}`}, () => {
+              client.write('start');
+              client.end();
+            });
+            autoCompType = 'command';
+            readStream.prompt();
+          } else {
+            autoCompType = 'command';
+            logger.error(`Service \'${answerService}\' is undefined\n`);
+            readStream.prompt();
+          }
+        } else {
+          autoCompType = 'command';
+          logger.error('Empty value\n');
+          readStream.prompt();
+        }
+      }
+    );
+  },
+  stop: readStream => {
+    autoCompType = 'service';
+    readStream.question(
+      '* service: ',
+      answerService => {
+        if (answerService) {
+          if (modulesResources.indexOf(answerService.trim()) !== -1) {
+            const client = net.connect({path: `${pathSocket}/${answerService.trim()}`}, () => {
+              client.write('stop');
+              client.end();
+            });
+            autoCompType = 'command';
+            readStream.prompt();
+          } else {
+            autoCompType = 'command';
+            logger.error(`Service \'${answerService}\' is undefined\n`);
+            readStream.prompt();
+          }
+        } else {
+          autoCompType = 'command';
+          logger.error('Empty value\n');
+          readStream.prompt();
+        }
+      }
+    );
+  },
 };
 
 
@@ -328,16 +399,51 @@ lodash.each(modulesInfo, (v, k) => {
 // Adding client modules (avoiding the empty string)
 modulesList = modulesList.concat(Object.keys(commCases).splice(1));
 
-// Welcome info is printed
-logger.welcome('\n\tWelcome to Bluebox-ng');
-logger.info(`\t(v${bluebox.version()})\n`);
+var checkDirSocket = (localDirPath, callback) => {
+  //Checking directories
+  let result = false;
 
-// The prompt is started
-createprompt();
+  fs.stat(localDirPath, (err, stats) => {
+    if (!err) {
+      if (stats.isDirectory()) {
+        logger.info('Socket exist');
+        callback(true);
+      } else {
+        logger.error(`Incorrect file name ${localDirPath}`);
+        callback(false);
+      }
+    } else {
+      logger.info(`Creating socket directory ${pathSocket}`);
+      fs.mkdir(pathSocket, (err) => {
+        if (err){
+          logger.error(err);
+          callback(false);
+        } else {
+          logger.info('Socket directory created');
+          callback(true);
+        }
+      });
+    }
+  });
 
-// Just in case ;)
-process.on('uncaughtException', err => {
-  logger.error('"uncaughtException" found:');
-  logger.error(err);
-  createprompt();
+};
+
+checkDirSocket (pathSocket, (checkTest) => {
+  if (checkTest) {
+    // Welcome info is printed
+    logger.welcome('\n\tWelcome to Bluebox-ng');
+    logger.info(`\t(v${bluebox.version()})\n`);
+
+    // The prompt is started
+    createprompt();
+
+    // Just in case ;)
+    process.on('uncaughtException', err => {
+      logger.error('"uncaughtException" found:');
+      logger.error(err);
+      createprompt();
+    });
+  } else {
+    process.exit(1);
+  }
 });
