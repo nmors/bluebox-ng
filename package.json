@@ -42,7 +42,9 @@
     "dep-sec": "nsp check",
     "dep-old": "ncu",
     "cont-int": "npm run lint && npm run dep-ok && npm run dep-sec && npm test",
-    "release": "npm run cont-int && release-it"
+    "release": "npm run cont-int && release-it",
+    "snyk-protect": "snyk protect",
+    "prepare": "npm run snyk-protect"
   },
   "dependencies": {
     "async": "^2.0.1",
@@ -71,7 +73,7 @@
     "request": "^2.55.0",
     "require-directory": "^2.1.0",
     "shelljs": "^0.7.3",
-    "shodan-client": "^2.0.0",
+    "shodan-client": "^3.1.0",
     "sip-fake-stack": "jesusprubio/sip-fake-stack",
     "snmp-native": "^1.0.18",
     "ssh2": "^0.5.0",
@@ -80,7 +82,8 @@
     "tcp-ping": "^0.1.1",
     "tftp-client": "^0.2.1",
     "traceroute": "^1.0.0",
-    "whois": "^2.3.1"
+    "whois": "^2.3.1",
+    "snyk": "^1.88.0"
   },
   "devDependencies": {
     "depcheck": "^0.6.4",
@@ -96,5 +99,6 @@
   "engines": {
     "node": "6.x.x",
     "npm": "3.x.x"
-  }
+  },
+  "snyk": true
 }
